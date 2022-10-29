@@ -373,8 +373,3 @@ class TestFollow(TestCase):
         post = Post.objects.get(author__following__user=TestFollow.user_one)
         self.assertEqual(post.author, TestFollow.user_two)
         self.assertEqual(post.text, 'test text')
-
-    def test_no_self_follow(self):
-        """
-        Тестируем невозможность подписаться сам на себя.
-        """
