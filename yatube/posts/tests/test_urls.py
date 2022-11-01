@@ -1,11 +1,8 @@
 from http import HTTPStatus
 
-from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
-from ..models import Group, Post
-
-User = get_user_model()
+from ..models import Group, Post, User
 
 
 class PostURLTests(TestCase):
@@ -64,23 +61,24 @@ class PostURLTests(TestCase):
         response = self.authorized_client.get('/create/')
         self.assertEqual(response.status_code, HTTPStatus.OK)
 
-    def test_post_edit_url_exists_desired_location_for(self):
+    def test_post_edit_url_exists_desired_location_for_guest(self):
         """
         Тестируем доступность и работоспосбность для/posts/<post_id>/edit/
         для гостей и зареганного неавтора поста.
         """
 
-        response_guest = self.guest_client.get(
-            f'/posts/{PostURLTests.post.id}/edit/')
-        self.assertRedirects(
-            response_guest,
-            f'/auth/login/?next=/posts/{PostURLTests.post.id}/edit/'
-        )
+        responses_redirects = {
+            self.guest_client.get(
+                f'/posts/{PostURLTests.post.id}/edit/'
+            ): f'/auth/login/?next=/posts/{PostURLTests.post.id}/edit/',
+            self.authorized_not_author_client.get(
+                f'/posts/{PostURLTests.post.id}/edit/'
+            ): f'/posts/{PostURLTests.post.id}/',
+        }
 
-        response_not_author = self.authorized_not_author_client.get(
-            f'/posts/{PostURLTests.post.id}/edit/')
-        self.assertRedirects(
-            response_not_author, f'/posts/{PostURLTests.post.id}/')
+        for response, redirect in responses_redirects.items():
+            with self.subTest(response=response):
+                self.assertRedirects(response, redirect)
 
     def test_urls_uses_correct_template(self):
         """Тестируем корректность отображения шаблонов для urls."""

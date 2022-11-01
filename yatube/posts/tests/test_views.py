@@ -2,17 +2,16 @@ import shutil
 import tempfile
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from ..constants import INDEX_PER_PAGE_LIMIT
+from ..constants import PAGI_INDEX_LAST_PAGE, PAGI_INDEX_PER_PAGE
 from ..forms import CommentForm, PostForm
-from ..models import Follow, Group, Post
+from ..models import Follow, Group, Post, User
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
-User = get_user_model()
 
 
 class PostPagesTests(TestCase):
@@ -27,6 +26,7 @@ class PostPagesTests(TestCase):
         )
         cls.post = Post.objects.create(
             author=cls.user,
+            group=cls.group,
             text='Тестовый пост',
         )
 
@@ -40,17 +40,17 @@ class PostPagesTests(TestCase):
         """
         pages_names_templates = {
             reverse('posts:index'): 'posts/index.html',
-            reverse('posts:group_list', kwargs={'slug': 'test_slug'}):
+            reverse('posts:group_list', kwargs={'slug': self.group.slug}):
                 'posts/group_list.html',
-            reverse('posts:profile', kwargs={'username': 'test_user'}):
+            reverse('posts:profile', kwargs={'username': self.user.username}):
                 'posts/profile.html',
             reverse(
                 'posts:post_detail',
                 kwargs={
-                    'post_id': f'{PostPagesTests.post.id}',
+                    'post_id': f'{self.post.id}',
                 }): 'posts/post_detail.html',
             reverse('posts:post_edit',
-                    kwargs={'post_id': f'{PostPagesTests.post.id}'}):
+                    kwargs={'post_id': f'{self.post.id}'}):
                 'posts/create_post.html',
             reverse('posts:post_create'): 'posts/create_post.html',
         }
@@ -59,6 +59,85 @@ class PostPagesTests(TestCase):
             with self.subTest(reverse_name=reverse_name):
                 response = self.authorized_client.get(reverse_name)
                 self.assertTemplateUsed(response, template)
+
+    @override_settings(CACHES={
+        'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache', }
+    })
+    def test_index_page_show_correct_context(self):
+        """Тестируем корректное отображение контекста главной страницы."""
+
+        response = self.authorized_client.get(reverse('posts:index'))
+        first_object = response.context['page_obj'][0]
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.group, self.group)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.text, self.post.text)
+
+    def test_group_list_page_show_correct_context(self):
+        """Тестируем корректное отображение контекста страницы группы."""
+
+        response = self.authorized_client.get(reverse(
+            'posts:group_list',
+            kwargs={'slug': self.group.slug}))
+        first_object = response.context['page_obj'][0]
+        group_posts = response.context['group']
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.group, self.group)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.text, self.post.text)
+        self.assertEqual(group_posts.id, self.group.id)
+        self.assertEqual(group_posts.title, self.group.title)
+        self.assertEqual(group_posts.slug, self.group.slug)
+        self.assertEqual(group_posts.description, self.group.description)
+
+    def test_profile_page_show_correct_context(self):
+        """Тестируем корректное отображение контекста профайла."""
+
+        response = self.authorized_client.get(reverse(
+            'posts:profile',
+            kwargs={'username': self.user.username}))
+        first_object = response.context['page_obj'][0]
+        author = response.context['author']
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.group, self.group)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.text, self.post.text)
+        self.assertEqual(author.id, self.user.id)
+        self.assertEqual(author.username, self.user.username)
+
+    def test_post_detail_page_show_correct_context(self):
+        """Тестируем корректное отображение контекста post_detail."""
+
+        response = self.authorized_client.get(reverse(
+            'posts:post_detail',
+            kwargs={'post_id': self.post.id}))
+        context_post = response.context.get('post')
+        self.assertEqual(context_post.id, self.post.id)
+        self.assertEqual(context_post.group, self.group)
+        self.assertEqual(context_post.author, self.user)
+        self.assertEqual(context_post.text, self.post.text)
+        self.assertIn('form', response.context)
+        self.assertIsInstance(response.context['form'], CommentForm)
+
+    def test_post_create_show_correct_context(self):
+        """Тестируем корректное отображение контекста формы post_create."""
+
+        response = self.authorized_client.get(reverse('posts:post_create'))
+        self.assertIn('form', response.context)
+        self.assertIsInstance(response.context['form'], PostForm)
+
+    def test_post_edit_and_create_form_show_correct_context(self):
+        """Тестируем корректное отображение контекста формы post_edit."""
+
+        response = self.authorized_client.get(reverse(
+            'posts:post_edit', kwargs={'post_id': self.post.id}))
+
+        self.assertIn('form', response.context)
+        self.assertIsInstance(response.context['form'], PostForm)
+
+        self.assertIn('is_edit', response.context)
+        is_edit = response.context['is_edit']
+        self.assertIsInstance(is_edit, bool)
 
 
 class TestPostContext(TestCase):
@@ -83,71 +162,6 @@ class TestPostContext(TestCase):
         self.authorized_client = Client()
         self.authorized_client.force_login(TestPostContext.user)
 
-    @override_settings(CACHES={
-        'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache', }
-    })
-    def test_index_page_show_correct_context(self):
-        """Тестируем корректное отображение контекста главной страницы."""
-
-        response = self.authorized_client.get(reverse('posts:index'))
-        expected_list = list(Post.objects.all()[:INDEX_PER_PAGE_LIMIT])
-        context_list = response.context.get('page_obj').object_list
-        self.assertListEqual(context_list, expected_list)
-
-    def test_group_list_page_show_correct_context(self):
-        """Тестируем корректное отображение контекста страницы группы."""
-
-        response = self.authorized_client.get(reverse(
-            'posts:group_list',
-            kwargs={'slug': 'test_slug'}))
-        expected_list = list(
-            TestPostContext.group.posts.all()[:INDEX_PER_PAGE_LIMIT])
-        context_list = response.context.get('page_obj').object_list
-        self.assertListEqual(context_list, expected_list)
-
-    def test_profile_page_show_correct_context(self):
-        """Тестируем корректное отображение контекста профайла."""
-
-        response = self.authorized_client.get(reverse(
-            'posts:profile',
-            kwargs={'username': 'test_user'}))
-        expected_list = list(
-            TestPostContext.user.posts.all()[:INDEX_PER_PAGE_LIMIT])
-        context_list = response.context.get('page_obj').object_list
-        self.assertListEqual(context_list, expected_list)
-
-    def test_post_detail_page_show_correct_context(self):
-        """Тестируем корректное отображение контекста post_detail."""
-
-        response = self.authorized_client.get(reverse(
-            'posts:post_detail',
-            kwargs={'post_id': 1}))
-        expected_post = Post.objects.get(id=1)
-        context_post = response.context.get('post')
-        self.assertEqual(context_post, expected_post)
-        self.assertIn('form', response.context)
-        self.assertIsInstance(response.context['form'], CommentForm)
-
-    def test_post_create_show_correct_context(self):
-        """Тестируем корректное отображение контекста формы post_create."""
-
-        response = self.authorized_client.get(reverse('posts:post_create'))
-        self.assertIn('form', response.context)
-        self.assertIsInstance(response.context['form'], PostForm)
-
-    def test_post_edit_and_create_form_show_correct_context(self):
-        """Тестируем корректное отображение контекста формы post_edit."""
-
-        response = self.authorized_client.get(reverse(
-            'posts:post_edit', kwargs={'post_id': 1}))
-
-        self.assertIn('form', response.context)
-        self.assertIsInstance(response.context['form'], PostForm)
-
-        self.assertIn('is_edit', response.context)
-        is_edit = response.context['is_edit']
-        self.assertIsInstance(is_edit, bool)
-
     def test_first_paginator_page_contains_ten_records(self):
         """
         Тестируем корректное отображение количества постов
@@ -155,9 +169,12 @@ class TestPostContext(TestCase):
         """
 
         pages_name_paginator_records = {
-            reverse('posts:index'): 10,
-            reverse('posts:group_list', kwargs={'slug': 'test_slug'}): 10,
-            reverse('posts:profile', kwargs={'username': 'test_user'}): 10,
+            reverse('posts:index'):
+                PAGI_INDEX_PER_PAGE,
+            reverse('posts:group_list', kwargs={'slug': self.group.slug}):
+                PAGI_INDEX_PER_PAGE,
+            reverse('posts:profile', kwargs={'username': self.user.username}):
+                PAGI_INDEX_PER_PAGE,
         }
         for reverse_name, pag_records in pages_name_paginator_records.items():
             with self.subTest():
@@ -171,9 +188,12 @@ class TestPostContext(TestCase):
         пагинатора второй страницы.
         """
         pages_name_paginator_records = {
-            reverse('posts:index'): 3,
-            reverse('posts:group_list', kwargs={'slug': 'test_slug'}): 3,
-            reverse('posts:profile', kwargs={'username': 'test_user'}): 3,
+            reverse('posts:index'):
+                PAGI_INDEX_LAST_PAGE,
+            reverse('posts:group_list', kwargs={'slug': self.group.slug}):
+                PAGI_INDEX_LAST_PAGE,
+            reverse('posts:profile', kwargs={'username': self.user.username}):
+                PAGI_INDEX_LAST_PAGE,
         }
         for reverse_name, pag_records in pages_name_paginator_records.items():
             with self.subTest():
@@ -187,16 +207,24 @@ class TestPostContext(TestCase):
         queryset_on_delete = Post.objects.filter(id__in=[10, 11, 12, 13])
         queryset_on_delete.delete()
 
-        posts_count = Post.objects.count()
-        response = self.authorized_client.get(reverse('posts:index'))
-        self.assertEqual(len(response.context['page_obj']), posts_count)
+        response_one = self.authorized_client.get(reverse('posts:index'))
+        delete_post = Post.objects.get(id=9)
+        delete_post.delete()
 
-        a = Post.objects.get(id=9)
-        a.delete()
+        response_two = self.authorized_client.get(reverse('posts:index'))
+        self.assertEqual(len(response_one.content), len(response_two.content))
 
-        refresh_posts_count = Post.objects.count()
-        self.assertEqual(
-            len(response.context['page_obj']), refresh_posts_count + 1)
+        cache.clear()
+
+        response_third = self.authorized_client.get(reverse('posts:index'))
+        self.assertNotEqual(
+            len(response_third.content),
+            len(response_one.content)
+        )
+        self.assertNotEqual(
+            len(response_third.content),
+            len(response_two.content)
+        )
 
 
 class TestOnePost(TestCase):
@@ -214,14 +242,7 @@ class TestOnePost(TestCase):
             slug='test_slug_two',
             description='Тестовое описание 2',
         )
-        Post.objects.bulk_create(
-            [Post(
-                author=cls.user,
-                group=cls.group_one,
-                text=f'Тестовый пост № {i}',
-            ) for i in range(5)]
-        )
-        Post.objects.create(
+        cls.post = Post.objects.create(
             author=cls.user,
             group=cls.group_two,
             text='Новый тестовый пост',
@@ -231,21 +252,55 @@ class TestOnePost(TestCase):
         self.authorized_client = Client()
         self.authorized_client.force_login(TestOnePost.user)
 
-    def test_pages_show_correct_count_posts(self):
-        """Тестируем корректное отображение количества постов на страницах."""
+    def test_post_do_not_shows_in_another_group(self):
+        """Тестируем корректное отсутсвие поста в контексте другой группы."""
 
-        pages_posts_count = {
-            reverse('posts:index'): 6,
-            reverse('posts:group_list', kwargs={'slug': 'test_slug_one'}): 5,
-            reverse('posts:profile', kwargs={'username': 'test_user'}): 6,
-        }
-        for page, posts_count in pages_posts_count.items():
-            with self.subTest(page=page):
-                response = self.authorized_client.get(page)
-                self.assertEqual(
-                    len(
-                        response.context.get('page_obj').object_list
-                    ), posts_count)
+        response = self.authorized_client.get(
+            reverse('posts:group_list', kwargs={'slug': self.group_one.slug})
+        )
+        self.assertEqual(len(response.context['page_obj']), 0)
+
+    def test_post_shows_on_main_page(self):
+        """Тестируем корректное отображение поста на главной странице"""
+
+        response = self.authorized_client.get(reverse('posts:index'))
+        first_object = response.context['page_obj'][0]
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.group, self.group_two)
+        self.assertEqual(first_object.text, self.post.text)
+
+    def test_post_shows_on_group_page(self):
+        """Тестируем, что пост появится в контексте страницы группы."""
+
+        response = self.authorized_client.get(
+            reverse('posts:group_list', kwargs={'slug': self.group_two.slug})
+        )
+        first_object = response.context['page_obj'][0]
+        group = response.context['group']
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.group, self.group_two)
+        self.assertEqual(first_object.text, self.post.text)
+        self.assertEqual(group.id, self.group_two.id)
+        self.assertEqual(group.title, self.group_two.title)
+        self.assertEqual(group.slug, self.group_two.slug)
+        self.assertEqual(group.description, self.group_two.description)
+
+    def test_post_show_on_profile_page(self):
+        """Тестируем, что пост появится в контексте профайла."""
+
+        response = self.authorized_client.get(
+            reverse('posts:profile', kwargs={'username': self.user.username})
+        )
+        first_object = response.context['page_obj'][0]
+        author = response.context['author']
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.group, self.group_two)
+        self.assertEqual(first_object.text, self.post.text)
+        self.assertEqual(author.id, self.user.id)
+        self.assertEqual(author.username, self.user.username)
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
@@ -284,7 +339,6 @@ class TestImagePost(TestCase):
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
     def setUp(self):
-        self.guest_client = Client()
         self.auth_client = Client()
         self.auth_client.force_login(TestImagePost.user)
 
@@ -302,10 +356,13 @@ class TestImagePost(TestCase):
         с картинкой главной страницы.
         """
 
-        response = self.guest_client.get(reverse('posts:index'))
-        expected_list = list(Post.objects.all()[:INDEX_PER_PAGE_LIMIT])
-        context_list = response.context.get('page_obj').object_list
-        self.assertListEqual(context_list, expected_list)
+        response = self.auth_client.get(reverse('posts:index'))
+        first_object = response.context['page_obj'][0]
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.group, self.group)
+        self.assertEqual(first_object.text, self.post.text)
+        self.assertEqual(first_object.image.name, self.post.image.name)
 
     @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
     def test_profile_show_correct_context_with_img(self):
@@ -315,11 +372,16 @@ class TestImagePost(TestCase):
 
         response = self.auth_client.get(reverse(
             'posts:profile',
-            kwargs={'username': 'test_user'}))
-        expected_list = list(
-            TestImagePost.user.posts.all()[:INDEX_PER_PAGE_LIMIT])
-        context_list = response.context.get('page_obj').object_list
-        self.assertListEqual(context_list, expected_list)
+            kwargs={'username': self.user.username}))
+        first_object = response.context['page_obj'][0]
+        author = response.context['author']
+        self.assertEqual(author.id, self.user.id)
+        self.assertEqual(author.username, self.user.username)
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.group, self.group)
+        self.assertEqual(first_object.text, self.post.text)
+        self.assertEqual(first_object.image.name, self.post.image.name)
 
     @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
     def test_group_page_show_correct_context_with_img(self):
@@ -329,11 +391,18 @@ class TestImagePost(TestCase):
 
         response = self.auth_client.get(reverse(
             'posts:group_list',
-            kwargs={'slug': 'test_slug'}))
-        expected_list = list(
-            TestImagePost.group.posts.all()[:INDEX_PER_PAGE_LIMIT])
-        context_list = response.context.get('page_obj').object_list
-        self.assertListEqual(context_list, expected_list)
+            kwargs={'slug': self.group.slug}))
+        first_object = response.context['page_obj'][0]
+        group = response.context['group']
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.group, self.group)
+        self.assertEqual(first_object.text, self.post.text)
+        self.assertEqual(first_object.image.name, self.post.image.name)
+        self.assertEqual(group.id, self.group.id)
+        self.assertEqual(group.title, self.group.title)
+        self.assertEqual(group.slug, self.group.slug)
+        self.assertEqual(group.description, self.group.description)
 
     @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
     def test_post_detail_page_show_correct_context_with_img(self):
@@ -342,10 +411,15 @@ class TestImagePost(TestCase):
         """
         response = self.auth_client.get(reverse(
             'posts:post_detail',
-            kwargs={'post_id': 1}))
-        expected_post = Post.objects.get(id=1)
-        context_post = response.context.get('post')
-        self.assertEqual(context_post, expected_post)
+            kwargs={'post_id': self.post.id}))
+        first_object = response.context['post']
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.author, self.user)
+        self.assertEqual(first_object.group, self.group)
+        self.assertEqual(first_object.text, self.post.text)
+        self.assertEqual(first_object.image.name, self.post.image.name)
+        self.assertIn('form', response.context)
+        self.assertIsInstance(response.context['form'], CommentForm)
 
 
 class TestFollow(TestCase):
@@ -354,6 +428,17 @@ class TestFollow(TestCase):
         super().setUpClass()
         cls.user_one = User.objects.create_user(username='ivanov')
         cls.user_two = User.objects.create_user(username='petrov')
+        cls.user_third = User.objects.create_user(username='cidorov')
+        cls.post = Post.objects.create(
+            text='test text',
+            author=TestFollow.user_two,
+        )
+
+    def setUp(self):
+        self.authorized_client = Client()
+        self.authorized_client.force_login(TestFollow.user_one)
+        self.third_client = Client()
+        self.third_client.force_login(TestFollow.user_third)
 
     def test_follow_post(self):
         """
@@ -365,11 +450,43 @@ class TestFollow(TestCase):
             author=TestFollow.user_two,
         )
 
-        Post.objects.create(
-            text='test text',
-            author=TestFollow.user_two,
-        )
+        response = self.authorized_client.get(reverse('posts:follow'))
+        first_object = response.context['page_obj'][0]
+        self.assertEqual(first_object.id, self.post.id)
+        self.assertEqual(first_object.author, self.user_two)
+        self.assertEqual(first_object.text, self.post.text)
 
-        post = Post.objects.get(author__following__user=TestFollow.user_one)
-        self.assertEqual(post.author, TestFollow.user_two)
-        self.assertEqual(post.text, 'test text')
+    def test_follow_post_not_author(self):
+        """
+        Тестируем, что пост не появился в контексте автора,
+        на которого нет подписки.
+        """
+
+        response = self.third_client.get(reverse('posts:follow'))
+        self.assertEqual(len(response.context.get('page_obj').object_list), 0)
+
+    def test_profile_follow(self):
+        """
+        Тест подписки.
+        """
+
+        response = self.authorized_client.get(
+            reverse('posts:profile_follow',
+                    kwargs={'username': self.user_third.username})
+        )
+        self.assertRedirects(response, reverse(
+            'posts:profile',
+            kwargs={'username': self.user_third.username}))
+
+    def test_profile_unfollow(self):
+        """
+        Тест отписки.
+        """
+
+        response = self.authorized_client.get(
+            reverse('posts:profile_unfollow',
+                    kwargs={'username': self.user_two.username})
+        )
+        self.assertRedirects(response, reverse(
+            'posts:profile',
+            kwargs={'username': self.user_two.username}))

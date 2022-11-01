@@ -149,13 +149,13 @@ def follow_index(request):
 @transaction.atomic
 @login_required
 def profile_follow(request, username):
+    author = get_object_or_404(User, username=username)
     try:
         if request.user.username != username:
-            with transaction.atomic():
-                Follow.objects.create(
-                    user=request.user,
-                    author=User.objects.get(username=username),
-                )
+            Follow.objects.create(
+                user=request.user,
+                author=author,
+            )
     except IntegrityError:
         return redirect('posts:index')
 
@@ -165,8 +165,7 @@ def profile_follow(request, username):
 @login_required
 def profile_unfollow(request, username):
     Follow.objects.filter(
-        user=request.user
-    ).filter(
+        user=request.user,
         author=User.objects.get(username=username)
     ).delete()
 
