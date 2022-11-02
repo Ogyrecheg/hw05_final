@@ -72,12 +72,12 @@ class PostCreateFormTests(TestCase):
 
         set_posts_after = set(Post.objects.all())
         dif_set = set_posts_after.difference(set_posts_before)
+        self.assertEqual(len(dif_set), 1)
 
-        if len(dif_set) == 1:
-            dif_post = dif_set.pop()
-            self.assertEqual(dif_post.group, self.group)
-            self.assertEqual(dif_post.text, form_data['text'])
-            self.assertEqual(dif_post.author, self.user)
+        dif_post = dif_set.pop()
+        self.assertEqual(dif_post.group, self.group)
+        self.assertEqual(dif_post.text, form_data['text'])
+        self.assertEqual(dif_post.author, self.user)
 
     def test_post_edit_page_make_change_in_post(self):
         """Тестируем форму, изменяющую данные поста."""
@@ -127,10 +127,11 @@ class PostCreateFormTests(TestCase):
 
         set_comment_after = set(self.post.comments.all())
         dif_comment = set_comment_after.difference(set_comment_before)
-        if len(dif_comment) == 1:
-            comment = dif_comment.pop()
-            self.assertEqual(comment.text, form_data['text'])
-            self.assertEqual(comment.post.id, self.post.id)
+        self.assertEqual(len(dif_comment), 1)
+
+        comment = dif_comment.pop()
+        self.assertEqual(comment.text, form_data['text'])
+        self.assertEqual(comment.post.id, self.post.id)
 
     @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
     def test_post_form_create_row_with_image(self):
@@ -157,10 +158,11 @@ class PostCreateFormTests(TestCase):
         )
         set_posts_after = set(Post.objects.all())
         dif_set = set_posts_after.difference(set_posts_before)
-        if len(dif_set) == 1:
-            dif_post = dif_set.pop()
-            self.assertEqual(Post.objects.count(), posts_count + 1)
-            self.assertEqual(dif_post.text, form_data['text'])
-            self.assertEqual(dif_post.group, self.group)
-            self.assertEqual(dif_post.author, self.user)
-            self.assertEqual(dif_post.image.name, 'posts/small.gif')
+        self.assertEqual(len(dif_set), 1)
+
+        dif_post = dif_set.pop()
+        self.assertEqual(Post.objects.count(), posts_count + 1)
+        self.assertEqual(dif_post.text, form_data['text'])
+        self.assertEqual(dif_post.group, self.group)
+        self.assertEqual(dif_post.author, self.user)
+        self.assertEqual(dif_post.image.name, 'posts/small.gif')

@@ -32,6 +32,7 @@ def group_posts(request: HttpRequest, slug: Any) -> HttpResponse:
     context: Dict[str, Union[Type[Group], QuerySet]] = {
         'group': group,
         'page_obj': page_obj,
+        'group_list': True,
     }
 
     return render(request, 'posts/group_list.html', context)
@@ -41,13 +42,14 @@ def profile(request, username):
     user = get_object_or_404(User, username=username)
     posts = user.posts.all()
     page_obj = paginator_func(posts, PROFILE_PER_PAGE_LIMIT, request)
-    context = {}
+    context = {
+        'following': False,
+    }
 
     if request.user.is_authenticated:
-        author = User.objects.get(username=username)
+        author = get_object_or_404(User, username=username)
         follow = Follow.objects.filter(
-            user=request.user
-        ).filter(
+            user=request.user,
             author=author
         )
         if follow:
@@ -60,17 +62,15 @@ def profile(request, username):
 
 
 def post_detail(request, post_id):
-    post = Post.objects.get(id=post_id)
+    post = get_object_or_404(Post, id=post_id)
     form = CommentForm(
         request.POST or None,
     )
-    context = {}
-    if post.author.username == request.user.username:
-        context['is_edit'] = True
-
-    context['post'] = post
-    context['comments'] = post.comments.all()
-    context['form'] = form
+    context = {
+        'post': post,
+        'comments': post.comments.all(),
+        'form': form,
+    }
 
     return render(request, 'posts/post_detail.html', context)
 
@@ -166,7 +166,7 @@ def profile_follow(request, username):
 def profile_unfollow(request, username):
     Follow.objects.filter(
         user=request.user,
-        author=User.objects.get(username=username)
+        author=get_object_or_404(User, username=username)
     ).delete()
 
     return redirect('posts:profile', username=username)

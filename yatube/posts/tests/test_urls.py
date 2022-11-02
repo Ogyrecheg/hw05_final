@@ -23,7 +23,6 @@ class PostURLTests(TestCase):
         )
 
     def setUp(self):
-        self.guest_client = Client()
         self.authorized_client = Client()
         self.authorized_client.force_login(PostURLTests.user)
         self.authorized_not_author_client = Client()
@@ -47,7 +46,7 @@ class PostURLTests(TestCase):
 
         for url, response_code in public_urls_response_code.items():
             with self.subTest(url=url):
-                response_guest = self.guest_client.get(url)
+                response_guest = self.client.get(url)
                 self.assertEqual(response_guest.status_code, response_code)
                 response_user = self.authorized_client.get(url)
                 self.assertEqual(response_user.status_code, response_code)
@@ -68,7 +67,7 @@ class PostURLTests(TestCase):
         """
 
         responses_redirects = {
-            self.guest_client.get(
+            self.client.get(
                 f'/posts/{PostURLTests.post.id}/edit/'
             ): f'/auth/login/?next=/posts/{PostURLTests.post.id}/edit/',
             self.authorized_not_author_client.get(
@@ -113,3 +112,11 @@ class PostURLTests(TestCase):
             with self.subTest(url=url):
                 response = self.auth_client.get(url)
                 self.assertRedirects(response, redirect_url)
+
+    def test_guest_try_to_create_new_post(self):
+        """
+        Тестируем редирект гостя при попытке создания нового поста.
+        """
+
+        response = self.client.get('/create/')
+        self.assertRedirects(response, '/auth/login/?next=/create/')

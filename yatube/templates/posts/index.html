@@ -2,7 +2,7 @@
 {% load thumbnail %}
 {% load cache %}
 {% block content %}
-    {% include 'posts/includes/switcher.html' with index='index' %}
+    {% include 'posts/includes/switcher.html' with index=True %}
     <h1>Последние обновления на сайте</h1>
     {% cache 20 posts request.user.username %}
         {% for post in page_obj %}
