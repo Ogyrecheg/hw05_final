@@ -10,8 +10,7 @@
             <h3>Всего постов: {{ author.posts.count }} </h3>
             <h4>Всего подписок: {{ author.follower.count }}</h4>
             <h4>Всего подписчиков: {{ author.following.count }}</h4>
-            {% if request.user.is_authenticated %}
-                {% if request.user.username != author.username %}
+                {% if request.user.is_authenticated and request.user.username != author.username %}
                     {% if following %}
                         <a
                           class="btn btn-lg btn-light"
@@ -28,7 +27,6 @@
                           </a>
                        {% endif %}
                 {% endif %}
-            {% endif %}
         </div>
         {% for post in page_obj %}
             {% include 'posts/includes/post_list.html' %}

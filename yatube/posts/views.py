@@ -32,7 +32,6 @@ def group_posts(request: HttpRequest, slug: Any) -> HttpResponse:
     context: Dict[str, Union[Type[Group], QuerySet]] = {
         'group': group,
         'page_obj': page_obj,
-        'group_list': True,
     }
 
     return render(request, 'posts/group_list.html', context)
@@ -48,11 +47,11 @@ def profile(request, username):
 
     if request.user.is_authenticated:
         author = get_object_or_404(User, username=username)
-        follow = Follow.objects.filter(
+
+        if Follow.objects.filter(
             user=request.user,
             author=author
-        )
-        if follow:
+        ).exists():
             context['following'] = True
 
     context['author'] = user

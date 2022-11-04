@@ -60,9 +60,9 @@ class PostURLTests(TestCase):
         response = self.authorized_client.get('/create/')
         self.assertEqual(response.status_code, HTTPStatus.OK)
 
-    def test_post_edit_url_exists_desired_location_for_guest(self):
+    def test_post_edit_url_for_guest_and_not_author(self):
         """
-        Тестируем доступность и работоспосбность для/posts/<post_id>/edit/
+        Тестируем редиректы при попытке редактировать пост
         для гостей и зареганного неавтора поста.
         """
 

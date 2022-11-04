@@ -16,11 +16,9 @@
   <li>
       <a href="{% url 'posts:post_detail' post.pk %}">подробная информация </a>
   </li>
-  {% if not group_list %}
-      {% if post.group %}
+    {% if post.group and not group %}
         <li>
             <a href="{% url 'posts:group_list' post.group.slug %}">все записи группы</a>
         </li>
-      {% endif %}
-  {% endif %}
+    {% endif %}
 </article> 

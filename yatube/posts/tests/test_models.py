@@ -22,13 +22,14 @@ class PostModelTest(TestCase):
     def test_models_have_correct_object_names(self):
         """Тестируем корректный вывод __str__ объектов моделей."""
 
-        self.assertEqual(
-            PostModelTest.group.title, str(PostModelTest.group)
-        )
+        objects_methods_expected_results = {
+            str(PostModelTest.group): PostModelTest.group.title,
+            str(PostModelTest.post): PostModelTest.post.text[:POST_STR_LIM],
+        }
 
-        self.assertEqual(
-            PostModelTest.post.text[:POST_STR_LIM], str(PostModelTest.post)
-        )
+        for object_method, result in objects_methods_expected_results.items():
+            with self.subTest(object_method=object_method):
+                self.assertEqual(object_method, result)
 
     def test_models_have_correct_verbose_names(self):
         """Тестируем корректность verbose_name объектов моделей."""
@@ -38,6 +39,7 @@ class PostModelTest(TestCase):
             'text': 'текст поста',
             'group': 'группа постов',
         }
+
         for field, verbose_name in fields_verbose_names.items():
             with self.subTest(field=field):
                 self.assertEqual(
