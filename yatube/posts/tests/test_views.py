@@ -9,7 +9,7 @@ from django.urls import reverse
 
 from ..constants import PAGI_INDEX_LAST_PAGE, PAGI_INDEX_PER_PAGE
 from ..forms import CommentForm, PostForm
-from ..models import Follow, Group, Post, User, Comment
+from ..models import Comment, Follow, Group, Post, User
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
