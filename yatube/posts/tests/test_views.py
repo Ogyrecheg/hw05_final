@@ -432,46 +432,31 @@ class TestFollow(TestCase):
         response = self.third_client.get(reverse('posts:follow'))
         self.assertEqual(len(response.context.get('page_obj').object_list), 0)
 
-    def test_profile_follow(self):
+    def test_profile_follow_two(self):
         """Тест подписки."""
 
         follows_count = Follow.objects.count()
-
-        if not Follow.objects.filter(
-            user=self.user_one,
-            author=self.user_third,
-        ).exists():
-            self.authorized_client.get(
-                reverse('posts:profile_follow',
-                        kwargs={'username': self.user_third.username})
-            )
-
-        if Follow.objects.filter(
-                user=self.user_one,
-                author=self.user_third,
-        ).exists():
-            self.assertEqual(Follow.objects.count(), follows_count + 1)
+        self.assertEqual(Follow.objects.filter(user=self.user_one).count(), 0)
+        self.authorized_client.get(
+            reverse('posts:profile_follow',
+                    kwargs={'username': self.user_third.username})
+        )
+        self.assertEqual(Follow.objects.filter(user=self.user_one).count(), 1)
+        self.assertEqual(Follow.objects.count(), follows_count + 1)
 
     def test_profile_unfollow(self):
         """Тест отписки."""
 
-        Follow.objects.create(
-            user=self.user_one,
-            author=self.user_third,
+        self.authorized_client.get(
+            reverse('posts:profile_follow',
+                    kwargs={'username': self.user_third.username})
         )
         follows_count = Follow.objects.count()
 
-        if Follow.objects.filter(
-            user=self.user_one,
-            author=self.user_third,
-        ).exists():
-            self.authorized_client.get(
-                reverse('posts:profile_unfollow',
-                        kwargs={'username': self.user_third.username})
-            )
+        self.authorized_client.get(
+            reverse('posts:profile_unfollow',
+                    kwargs={'username': self.user_third.username})
+        )
 
-        if not Follow.objects.filter(
-                user=self.user_one,
-                author=self.user_third,
-        ).exists():
-            self.assertEqual(Follow.objects.count(), follows_count - 1)
+        self.assertEqual(Follow.objects.filter(user=self.user_one).count(), 0)
+        self.assertEqual(Follow.objects.count(), follows_count - 1)
