@@ -432,16 +432,22 @@ class TestFollow(TestCase):
         response = self.third_client.get(reverse('posts:follow'))
         self.assertEqual(len(response.context.get('page_obj').object_list), 0)
 
-    def test_profile_follow_two(self):
+    def test_profile_follow(self):
         """Тест подписки."""
 
         follows_count = Follow.objects.count()
-        self.assertEqual(Follow.objects.filter(user=self.user_one).count(), 0)
+        self.assertFalse(Follow.objects.filter(
+            user=self.user_one,
+            author=self.user_third,
+        ).exists())
         self.authorized_client.get(
             reverse('posts:profile_follow',
                     kwargs={'username': self.user_third.username})
         )
-        self.assertEqual(Follow.objects.filter(user=self.user_one).count(), 1)
+        self.assertTrue(Follow.objects.filter(
+            user=self.user_one,
+            author=self.user_third,
+        ).exists())
         self.assertEqual(Follow.objects.count(), follows_count + 1)
 
     def test_profile_unfollow(self):
@@ -451,6 +457,10 @@ class TestFollow(TestCase):
             reverse('posts:profile_follow',
                     kwargs={'username': self.user_third.username})
         )
+        self.assertTrue(Follow.objects.filter(
+            user=self.user_one,
+            author=self.user_third,
+        ).exists())
         follows_count = Follow.objects.count()
 
         self.authorized_client.get(
@@ -458,5 +468,8 @@ class TestFollow(TestCase):
                     kwargs={'username': self.user_third.username})
         )
 
-        self.assertEqual(Follow.objects.filter(user=self.user_one).count(), 0)
+        self.assertFalse(Follow.objects.filter(
+            user=self.user_one,
+            author=self.user_third,
+        ).exists())
         self.assertEqual(Follow.objects.count(), follows_count - 1)
