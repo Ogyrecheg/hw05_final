@@ -1,3 +1,32 @@
-# hw05_final
+# Описание
+Yatube это платформа для создания блогов, поиска друзей и обмена мнениями.
 
-[![CI](https://github.com/yandex-praktikum/hw05_final/actions/workflows/python-app.yml/badge.svg?branch=master)](https://github.com/yandex-praktikum/hw05_final/actions/workflows/python-app.yml)
+## Запуск проекта:
+Скопируйте проект из репозитория:
+```bash 
+https://github.com/Ogyrecheg/hw05_final.git
+```
+Перейти в дерикторию скачанного проекта.
+Создать и активировать virtual enviroment:
+```bash
+py -3.7 -m venv -venv
+source venv/scripts/activate
+```
+При активированном virtual env скачать необходимые зависимости проекта:
+```bash
+(venv) pip install -r requirements.txt
+```
+### Функционал проекта:
+- регистрация пользователей с возможностью восстановления пароля
+- подписка на авторов
+- добавление комментариев
+- поиск
+- кеширование
+- пагинация
+
+**Технологии:**
+- Python
+- Django
+
+### Автор проекта:
+студент когорты №17 [Шевченко Александр](https://github.com/Ogyrecheg)
